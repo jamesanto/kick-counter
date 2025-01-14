@@ -1,180 +1,210 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Baby Kick Counter</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      text-align: center;
-    }
-    .button {
-      margin: 20px;
-      padding: 20px 40px;
-      font-size: 24px;
-      border-radius: 50px;
-      border: none;
-      background-color: #4CAF50;
-      color: white;
-      cursor: pointer;
-    }
-    .undo {
-      background-color: #f44336;
-      padding: 10px 20px;
-      font-size: 18px;
-      border-radius: 25px;
-      color: white;
-      cursor: pointer;
-    }
-    .stats {
-      margin-top: 20px;
-      text-align: left;
-    }
-    table {
-      margin: 20px auto;
-      border-collapse: collapse;
-      width: 90%;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      text-align: center;
-    }
-    th {
-      background-color: #4CAF50;
-      color: white;
-    }
-    .section-title {
-      margin: 20px 0 10px;
-      font-size: 24px;
-      color: #4CAF50;
-    }
-  </style>
-</head>
-<body>
-  <h1>Baby Kick Counter</h1>
-  <button class="button" id="kickButton">Mark Kick</button>
-  <button class="undo" id="undoButton">Undo</button>
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Undo2, Activity } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
-  <div class="stats">
-    <h2 class="section-title">Today's Stats</h2>
-    <p id="totalKicksToday">Total Kicks Today: 0</p>
-    <p id="movingAverage">Moving Average (10 Kicks): N/A</p>
-    <p id="kickIntervals">Kick Intervals (Shortest, Longest, Average): N/A</p>
-    <p id="peakActivity">Peak Activity Period: N/A</p>
-  </div>
-
-  <div class="stats">
-    <h2 class="section-title">Historical Stats</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Total Kicks</th>
-          <th>Moving Average</th>
-          <th>Peak Activity Period</th>
-          <th>Intervals (Shortest, Longest, Avg)</th>
-        </tr>
-      </thead>
-      <tbody id="historicalData"></tbody>
-    </table>
-  </div>
-
-  <script>
-    const localStorageKey = 'kickData';
-    let kickData = JSON.parse(localStorage.getItem(localStorageKey)) || {};
-
-    const kickButton = document.getElementById('kickButton');
-    const undoButton = document.getElementById('undoButton');
-    const totalKicksToday = document.getElementById('totalKicksToday');
-    const movingAverage = document.getElementById('movingAverage');
-    const kickIntervals = document.getElementById('kickIntervals');
-    const peakActivity = document.getElementById('peakActivity');
-    const historicalData = document.getElementById('historicalData');
-
-    const getToday = () => new Date().toISOString().split('T')[0];
-
-    const saveData = () => {
-      localStorage.setItem(localStorageKey, JSON.stringify(kickData));
-      renderStats();
+const BabyKickTracker = () => {
+  // State management
+  const [kicks, setKicks] = useState([]);
+  const [historicalData, setHistoricalData] = useState({});
+  
+  // Load data from localStorage on component mount
+  useEffect(() => {
+    const savedKicks = localStorage.getItem('kicks');
+    const savedHistory = localStorage.getItem('kickHistory');
+    
+    if (savedKicks) setKicks(JSON.parse(savedKicks));
+    if (savedHistory) setHistoricalData(JSON.parse(savedHistory));
+  }, []);
+  
+  // Save data to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('kicks', JSON.stringify(kicks));
+  }, [kicks]);
+  
+  useEffect(() => {
+    localStorage.setItem('kickHistory', JSON.stringify(historicalData));
+  }, [historicalData]);
+  
+  // Helper functions
+  const getCurrentDate = () => {
+    return new Date().toISOString().split('T')[0];
+  };
+  
+  const getTimeString = (date) => {
+    return new Date(date).toLocaleTimeString();
+  };
+  
+  const calculateStats = (kickArray) => {
+    if (!kickArray || kickArray.length === 0) return null;
+    
+    const intervals = [];
+    for (let i = 1; i < kickArray.length; i++) {
+      intervals.push((new Date(kickArray[i]) - new Date(kickArray[i-1])) / 1000); // in seconds
+    }
+    
+    const movingAverage = kickArray.length >= 10 
+      ? (new Date(kickArray[kickArray.length - 1]) - new Date(kickArray[kickArray.length - 10])) / (9 * 1000)
+      : null;
+    
+    return {
+      total: kickArray.length,
+      movingAverage: movingAverage,
+      shortestInterval: Math.min(...intervals) || null,
+      longestInterval: Math.max(...intervals) || null,
+      averageInterval: intervals.length ? intervals.reduce((a, b) => a + b) / intervals.length : null
     };
+  };
+  
+  // Event handlers
+  const handleKick = () => {
+    const newKicks = [...kicks, new Date().toISOString()];
+    setKicks(newKicks);
+    
+    // Update historical data
+    const currentDate = getCurrentDate();
+    setHistoricalData(prev => ({
+      ...prev,
+      [currentDate]: calculateStats(newKicks)
+    }));
+  };
+  
+  const handleUndo = () => {
+    if (kicks.length === 0) return;
+    
+    const newKicks = kicks.slice(0, -1);
+    setKicks(newKicks);
+    
+    // Update historical data
+    const currentDate = getCurrentDate();
+    setHistoricalData(prev => ({
+      ...prev,
+      [currentDate]: calculateStats(newKicks)
+    }));
+  };
+  
+  const currentStats = calculateStats(kicks);
+  
+  return (
+    <div className="max-w-4xl mx-auto p-4 space-y-6">
+      {/* Main Kick Button */}
+      <div className="flex flex-col items-center space-y-4">
+        <Button 
+          className="w-48 h-48 rounded-full text-2xl" 
+          onClick={handleKick}
+        >
+          Record Kick
+        </Button>
+        <Button
+          variant="outline"
+          className="flex items-center space-x-2"
+          onClick={handleUndo}
+          disabled={kicks.length === 0}
+        >
+          <Undo2 className="w-4 h-4" />
+          <span>Undo Last Kick</span>
+        </Button>
+      </div>
 
-    const addKick = () => {
-      const today = getToday();
-      if (!kickData[today]) kickData[today] = [];
-      kickData[today].push(Date.now());
-      saveData();
-    };
+      {/* Today's Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Activity className="w-5 h-5" />
+            <span>Today's Stats</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {currentStats ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <p className="text-sm text-gray-500">Total Kicks</p>
+                <p className="text-2xl font-bold">{currentStats.total}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Moving Average (10 kicks)</p>
+                <p className="text-2xl font-bold">
+                  {currentStats.movingAverage ? `${Math.round(currentStats.movingAverage)}s` : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Average Interval</p>
+                <p className="text-2xl font-bold">
+                  {currentStats.averageInterval ? `${Math.round(currentStats.averageInterval)}s` : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Last Kick</p>
+                <p className="text-2xl font-bold">
+                  {kicks.length > 0 ? getTimeString(kicks[kicks.length - 1]) : 'N/A'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <Alert>
+              <AlertDescription>
+                No kicks recorded today. Press the button above to start tracking!
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
 
-    const undoKick = () => {
-      const today = getToday();
-      if (kickData[today] && kickData[today].length > 0) {
-        kickData[today].pop();
-        saveData();
-      }
-    };
+      {/* Historical Data */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Historical Data</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Total Kicks</TableHead>
+                  <TableHead className="text-right">Avg Interval</TableHead>
+                  <TableHead className="text-right">Moving Avg</TableHead>
+                  <TableHead className="text-right">Shortest</TableHead>
+                  <TableHead className="text-right">Longest</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.entries(historicalData)
+                  .sort((a, b) => new Date(b[0]) - new Date(a[0]))
+                  .map(([date, stats]) => (
+                    <TableRow key={date}>
+                      <TableCell>{new Date(date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-right">{stats.total}</TableCell>
+                      <TableCell className="text-right">
+                        {stats.averageInterval ? `${Math.round(stats.averageInterval)}s` : 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {stats.movingAverage ? `${Math.round(stats.movingAverage)}s` : 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {stats.shortestInterval ? `${Math.round(stats.shortestInterval)}s` : 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {stats.longestInterval ? `${Math.round(stats.longestInterval)}s` : 'N/A'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
 
-    const calculateMovingAverage = (times) => {
-      if (times.length < 10) return 'N/A';
-      const intervals = times.slice(-10).map((t, i, arr) => (i > 0 ? t - arr[i - 1] : 0)).filter(i => i > 0);
-      const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-      return (avg / 1000).toFixed(2) + ' seconds';
-    };
-
-    const calculateIntervals = (times) => {
-      if (times.length < 2) return 'N/A';
-      const intervals = times.map((t, i, arr) => (i > 0 ? t - arr[i - 1] : null)).slice(1);
-      const shortest = Math.min(...intervals) / 1000;
-      const longest = Math.max(...intervals) / 1000;
-      const average = intervals.reduce((a, b) => a + b, 0) / intervals.length / 1000;
-      return `${shortest.toFixed(2)}s, ${longest.toFixed(2)}s, ${average.toFixed(2)}s`;
-    };
-
-    const findPeakActivityPeriod = (times) => {
-      if (times.length < 2) return 'N/A';
-      const hourBuckets = Array(24).fill(0);
-      times.forEach((t) => {
-        const hour = new Date(t).getHours();
-        hourBuckets[hour]++;
-      });
-      const peakHour = hourBuckets.indexOf(Math.max(...hourBuckets));
-      return `${peakHour}:00 - ${peakHour + 1}:00`;
-    };
-
-    const renderStats = () => {
-      const today = getToday();
-      const todayData = kickData[today] || [];
-
-      // Update daily stats
-      totalKicksToday.textContent = `Total Kicks Today: ${todayData.length}`;
-      movingAverage.textContent = `Moving Average (10 Kicks): ${calculateMovingAverage(todayData)}`;
-      kickIntervals.textContent = `Kick Intervals (Shortest, Longest, Average): ${calculateIntervals(todayData)}`;
-      peakActivity.textContent = `Peak Activity Period: ${findPeakActivityPeriod(todayData)}`;
-
-      // Update historical stats
-      historicalData.innerHTML = Object.keys(kickData)
-        .sort((a, b) => new Date(b) - new Date(a))
-        .map((date) => {
-          const data = kickData[date];
-          return `
-            <tr>
-              <td>${date}</td>
-              <td>${data.length}</td>
-              <td>${calculateMovingAverage(data)}</td>
-              <td>${findPeakActivityPeriod(data)}</td>
-              <td>${calculateIntervals(data)}</td>
-            </tr>
-          `;
-        })
-        .join('');
-    };
-
-    kickButton.addEventListener('click', addKick);
-    undoButton.addEventListener('click', undoKick);
-
-    renderStats();
-  </script>
-</body>
-</html>
+export default BabyKickTracker;
