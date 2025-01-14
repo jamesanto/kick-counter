@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Baby Kick Counter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      text-align: center;
+    }
+    .button {
+      margin: 20px;
+      padding: 20px 40px;
+      font-size: 24px;
+      border-radius: 50px;
+      border: none;
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
+    .undo {
+      background-color: #f44336;
+      padding: 10px 20px;
+      font-size: 18px;
+      border-radius: 25px;
+      color: white;
+      cursor: pointer;
+    }
+    .stats {
+      margin-top: 20px;
+      text-align: left;
+    }
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 90%;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background-color: #4CAF50;
+      color: white;
+    }
+    .section-title {
+      margin: 20px 0 10px;
+      font-size: 24px;
+      color: #4CAF50;
+    }
+  </style>
+</head>
+<body>
+  <h1>Baby Kick Counter</h1>
+  <button class="button" id="kickButton">Mark Kick</button>
+  <button class="undo" id="undoButton">Undo</button>
+
+  <div class="stats">
+    <h2 class="section-title">Today's Stats</h2>
+    <p id="totalKicksToday">Total Kicks Today: 0</p>
+    <p id="movingAverage">Moving Average (10 Kicks): N/A</p>
+    <p id="kickIntervals">Kick Intervals (Shortest, Longest, Average): N/A</p>
+    <p id="peakActivity">Peak Activity Period: N/A</p>
+  </div>
+
+  <div class="stats">
+    <h2 class="section-title">Historical Stats</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Total Kicks</th>
+          <th>Moving Average</th>
+          <th>Peak Activity Period</th>
+          <th>Intervals (Shortest, Longest, Avg)</th>
+        </tr>
+      </thead>
+      <tbody id="historicalData"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const localStorageKey = 'kickData';
+    let kickData = JSON.parse(localStorage.getItem(localStorageKey)) || {};
+
+    const kickButton = document.getElementById('kickButton');
+    const undoButton = document.getElementById('undoButton');
+    const totalKicksToday = document.getElementById('totalKicksToday');
+    const movingAverage = document.getElementById('movingAverage');
+    const kickIntervals = document.getElementById('kickIntervals');
+    const peakActivity = document.getElementById('peakActivity');
+    const historicalData = document.getElementById('historicalData');
+
+    const getToday = () => new Date().toISOString().split('T')[0];
+
+    const saveData = () => {
+      localStorage.setItem(localStorageKey, JSON.stringify(kickData));
+      renderStats();
+    };
+
+    const addKick = () => {
+      const today = getToday();
+      if (!kickData[today]) kickData[today] = [];
+      kickData[today].push(Date.now());
+      saveData();
+    };
+
+    const undoKick = () => {
+      const today = getToday();
+      if (kickData[today] && kickData[today].length > 0) {
+        kickData[today].pop();
+        saveData();
+      }
+    };
+
+    const calculateMovingAverage = (times) => {
+      if (times.length < 10) return 'N/A';
+      const intervals = times.slice(-10).map((t, i, arr) => (i > 0 ? t - arr[i - 1] : 0)).filter(i => i > 0);
+      const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      return (avg / 1000).toFixed(2) + ' seconds';
+    };
+
+    const calculateIntervals = (times) => {
+      if (times.length < 2) return 'N/A';
+      const intervals = times.map((t, i, arr) => (i > 0 ? t - arr[i - 1] : null)).slice(1);
+      const shortest = Math.min(...intervals) / 1000;
+      const longest = Math.max(...intervals) / 1000;
+      const average = intervals.reduce((a, b) => a + b, 0) / intervals.length / 1000;
+      return `${shortest.toFixed(2)}s, ${longest.toFixed(2)}s, ${average.toFixed(2)}s`;
+    };
+
+    const findPeakActivityPeriod = (times) => {
+      if (times.length < 2) return 'N/A';
+      const hourBuckets = Array(24).fill(0);
+      times.forEach((t) => {
+        const hour = new Date(t).getHours();
+        hourBuckets[hour]++;
+      });
+      const peakHour = hourBuckets.indexOf(Math.max(...hourBuckets));
+      return `${peakHour}:00 - ${peakHour + 1}:00`;
+    };
+
+    const renderStats = () => {
+      const today = getToday();
+      const todayData = kickData[today] || [];
+
+      // Update daily stats
+      totalKicksToday.textContent = `Total Kicks Today: ${todayData.length}`;
+      movingAverage.textContent = `Moving Average (10 Kicks): ${calculateMovingAverage(todayData)}`;
+      kickIntervals.textContent = `Kick Intervals (Shortest, Longest, Average): ${calculateIntervals(todayData)}`;
+      peakActivity.textContent = `Peak Activity Period: ${findPeakActivityPeriod(todayData)}`;
+
+      // Update historical stats
+      historicalData.innerHTML = Object.keys(kickData)
+        .sort((a, b) => new Date(b) - new Date(a))
+        .map((date) => {
+          const data = kickData[date];
+          return `
+            <tr>
+              <td>${date}</td>
+              <td>${data.length}</td>
+              <td>${calculateMovingAverage(data)}</td>
+              <td>${findPeakActivityPeriod(data)}</td>
+              <td>${calculateIntervals(data)}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    };
+
+    kickButton.addEventListener('click', addKick);
+    undoButton.addEventListener('click', undoKick);
+
+    renderStats();
+  </script>
+</body>
+</html>
